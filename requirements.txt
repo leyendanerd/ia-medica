@@ -1,0 +1,16 @@
+# ─── Core ───────────────────────────────────────────────────────────────────
+streamlit==1.35.0
+numpy==1.26.4
+Pillow==10.3.0
+
+# ─── TensorFlow Lite runtime ─────────────────────────────────────────────────
+# En Jetson Orin Nano (producción) usar el wheel oficial de NVIDIA para Jetpack,
+# o TensorRT directamente. Para el MVP en x86/contenedor genérico:
+tflite-runtime==2.14.0
+
+# ─── Visión y procesamiento médico (según documento: CLAHE, normalización) ───
+opencv-python-headless==4.9.0.80
+pydicom==2.4.4
+
+# ─── Utilidades ──────────────────────────────────────────────────────────────
+scipy==1.13.0

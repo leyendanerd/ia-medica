@@ -1,0 +1,46 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# DentalVision AI — Variante para NVIDIA Jetson Orin Nano
+# Referencia: documento del proyecto, sección "Despliegue"
+#   "Mediante la creación de una imagen Docker que contenga el sistema
+#    operativo optimizado, las librerías necesarias y el modelo entrenado.
+#    Esta imagen se grabará en el hardware NVIDIA Jetson, convirtiéndolo
+#    en un appliance de red."
+#
+# Requiere JetPack instalado en el host y el runtime NVIDIA Container Toolkit
+# (nvidia-docker2) configurado. Compilar y correr en la propia Jetson (ARM64),
+# NO cross-compilar desde x86 sin QEMU.
+#
+# Build:  docker build -f Dockerfile.jetson -t dental-vision:jetson .
+# Run:    docker run --runtime nvidia --network host dental-vision:jetson
+# ─────────────────────────────────────────────────────────────────────────────
+
+FROM nvcr.io/nvidia/l4t-tensorrt:r8.5.2-runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    STREAMLIT_SERVER_PORT=8501 \
+    STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
+    STREAMLIT_SERVER_HEADLESS=true
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip python3-opencv \
+    libgl1-mesa-glx libglib2.0-0 fonts-dejavu curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# En Jetson, TensorFlow/TFLite y PyCUDA deben instalarse desde los wheels
+# oficiales de NVIDIA para el JetPack correspondiente (no desde PyPI genérico).
+# Ver: https://developer.nvidia.com/embedded/jetson-orin-nano
+COPY requirements.jetson.txt .
+RUN pip3 install --no-cache-dir -r requirements.jetson.txt
+
+COPY . .
+RUN mkdir -p /app/model
+
+EXPOSE 8501
+
+# Nota: en la Jetson, sustituir MockDentalInference por el modelo TensorRT
+# real (.engine) al colocar los pesos en /app/model/
+ENTRYPOINT ["streamlit", "run", "app/main.py", \
+            "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]

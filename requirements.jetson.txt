@@ -1,0 +1,11 @@
+# Dependencias para despliegue en NVIDIA Jetson Orin Nano.
+# TensorFlow/TensorRT y PyCUDA se instalan desde los wheels oficiales de
+# NVIDIA para el JetPack instalado (no incluidos aquí por ser específicos
+# de la versión de JetPack del dispositivo).
+streamlit==1.35.0
+numpy==1.26.4
+Pillow==10.3.0
+pydicom==2.4.4
+scipy==1.13.0
+# opencv-python-headless se omite: usar python3-opencv del sistema (apt),
+# ya que el paquete PyPI no incluye aceleración CUDA en ARM64.

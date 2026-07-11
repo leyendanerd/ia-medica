@@ -1,0 +1,35 @@
+version: "3.9"
+
+services:
+  dental-vision:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dental-vision-mvp:0.2.0
+    container_name: dental-vision-app
+    ports:
+      - "8501:8501"
+    volumes:
+      # Montar modelo entrenado real sin reconstruir la imagen
+      - ./model:/app/model:ro
+      - ./logs:/app/logs
+    environment:
+      - PYTHONUNBUFFERED=1
+      - MODEL_PATH=/app/model/dental_model.tflite   # vacío = modo mock
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    mem_limit: 2g
+    cpus: "2.0"
+    networks:
+      - clinic-local
+
+networks:
+  clinic-local:
+    driver: bridge
+    # En producción: red aislada de la clínica, sin salida a internet
+    # (el sistema no requiere ni debe tener acceso externo).
