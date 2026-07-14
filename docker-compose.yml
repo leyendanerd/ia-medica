@@ -23,8 +23,8 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
-    mem_limit: 2g
-    cpus: "2.0"
+    mem_limit: 700m
+    cpus: "1.0"
     networks:
       - clinic-local
 

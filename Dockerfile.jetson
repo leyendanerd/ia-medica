@@ -22,9 +22,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_SERVER_ADDRESS=0.0.0.0 \
     STREAMLIT_SERVER_HEADLESS=true
 
+# Nota: si la base L4T usa Ubuntu 20.04/22.04 (no Debian Bookworm), el
+# paquete 'libgl1-mesa-glx' sigue existiendo ahi. Se deja 'libgl1' como
+# alternativa; si falla, revertir a 'libgl1-mesa-glx' segun la version
+# base de JetPack que estes usando.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3-pip python3-opencv \
-    libgl1-mesa-glx libglib2.0-0 fonts-dejavu curl \
+    libgl1 libglib2.0-0 fonts-dejavu curl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

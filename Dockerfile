@@ -18,8 +18,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
 
 # Dependencias del sistema requeridas por OpenCV, Pillow y fuentes para anotar imagenes
+# Nota: libgl1-mesa-glx fue renombrado a libgl1 desde Debian 12 (Bookworm),
+# que es la base de las imagenes python:3.11-slim actuales.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libgl1-mesa-glx \
+    libgl1 \
     libglib2.0-0 \
     libsm6 \
     libxext6 \

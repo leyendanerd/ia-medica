@@ -11,6 +11,7 @@ Alineado con el proyecto de innovación (UNIR — Maestría en IA):
 """
 
 import streamlit as st
+import streamlit.components.v1 as components
 import numpy as np
 from PIL import Image
 import io
@@ -243,14 +244,23 @@ with col_upload:
                 pil_image = Image.open(io.BytesIO(file_bytes)).convert("RGB")
                 meta = {}
 
+        # OPTIMIZACION DE MEMORIA: reducir la imagen apenas se carga.
+        # El modelo trabaja a 512x512 de todas formas, asi que la resolucion
+        # extra de una panoramica (2000x1000+) no aporta precision, solo consume
+        # RAM: se mantendrian ~3 copias grandes en memoria (original, CLAHE,
+        # anotada). Critico en VMs con poca RAM.
+        MAX_DIM = 1024
+        if max(pil_image.size) > MAX_DIM:
+            pil_image.thumbnail((MAX_DIM, MAX_DIM), Image.LANCZOS)
+
         st.session_state.original_image = pil_image
 
         tab_orig, tab_proc = st.tabs(["Original", "Pre-procesada (CLAHE)"])
         with tab_orig:
-            st.image(pil_image, use_container_width=True, caption=f"📁 {uploaded_file.name}")
+            st.image(pil_image, use_column_width=True, caption=f"📁 {uploaded_file.name}")
         with tab_proc:
             processed = processor.preprocess(pil_image)
-            st.image(processed["display"], use_container_width=True, caption="512×512 · normalizado · CLAHE (OpenCV, espacio LAB)")
+            st.image(processed["display"], use_column_width=True, caption="512×512 · normalizado · CLAHE (OpenCV, espacio LAB)")
 
         st.markdown(f"""
         <div class="card" style="margin-top:0.75rem; background:var(--bg-card); border:1px solid var(--border); border-radius:12px; padding:0.9rem;">
@@ -297,10 +307,23 @@ with col_results:
 
         with tab_img:
             if r.get("annotated_image"):
-                st.image(r["annotated_image"], use_container_width=True, caption="Bounding boxes + heatmap de hallazgos")
+                st.image(r["annotated_image"], use_column_width=True, caption="Bounding boxes + heatmap de hallazgos")
 
         with tab_odonto:
-            st.markdown(render_odontogram_svg(r["odontogram"]), unsafe_allow_html=True)
+            # El SVG se renderiza dentro de un iframe aislado (components.html)
+            # en lugar de st.markdown(unsafe_allow_html=True): Streamlit sanitiza
+            # el HTML inyectado por markdown y eso puede romper su renderizador React.
+            svg = render_odontogram_svg(r["odontogram"])
+            components.html(
+                f"""
+                <div style="background:#0a0e1a; padding:12px; border-radius:12px;
+                            font-family: 'Space Grotesk', system-ui, sans-serif;">
+                    {svg}
+                </div>
+                """,
+                height=260,
+                scrolling=False,
+            )
             st.caption("Odontograma generado automáticamente en notación FDI (universal) — objetivo central del proyecto.")
 
         st.markdown("<div style='height:0.5rem'></div>", unsafe_allow_html=True)
@@ -376,9 +399,21 @@ with col_results:
                 "detecciones": r["detections"],
             },
         }
+        # Encoder tolerante a tipos NumPy (np.float32, np.int64, np.ndarray).
+        # json.dumps() solo serializa tipos nativos de Python; el modelo real
+        # devolvera arrays de NumPy, asi que esto evita que el reporte falle.
+        def _json_safe(obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, np.integer):
+                return int(obj)
+            if isinstance(obj, np.floating):
+                return float(obj)
+            raise TypeError(f"Tipo no serializable: {type(obj).__name__}")
+
         st.download_button(
             "📥 Descargar reporte JSON",
-            data=json.dumps(report, indent=2, ensure_ascii=False),
+            data=json.dumps(report, indent=2, ensure_ascii=False, default=_json_safe),
             file_name=f"dental_report_{time.strftime('%Y%m%d_%H%M%S')}.json",
             mime="application/json",
         )

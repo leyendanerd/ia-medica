@@ -139,38 +139,77 @@ class MockDentalInference:
 
     # ─── Mock: genera detecciones sintéticas plausibles ──────────────────────
     def _mock_detections(self, w: int, h: int):
+        """
+        ATENCION — ESTO NO ES DETECCION REAL.
+
+        No se lee ni un solo pixel de la imagen. Las cajas se colocan segun la
+        geometria TIPICA de una radiografia panoramica (arco dental parabolico),
+        y las clases/confianzas son aleatorias con semilla fija.
+
+        Su unico proposito es alimentar la interfaz para demostrar el flujo
+        completo (fase "Prototipar"). Sustituir por _run_tflite() con un modelo
+        entrenado para obtener deteccion real.
+        """
         rng = random.Random(7)
         boxes, scores, classes, tooth_ids = [], [], [], []
-
-        rows = {"upper": 0.15, "lower": 0.60}
-        per_row = 16
-        tooth_w = 1.0 / (per_row + 1)
-        tooth_h = 0.18
 
         upper_ids = FDI_QUADRANTS["upper_right"][::-1] + FDI_QUADRANTS["upper_left"]
         lower_ids = FDI_QUADRANTS["lower_left"] + FDI_QUADRANTS["lower_right"][::-1]
 
+        # Se omiten las muelas del juicio (18,28,38,48): ausentes en la mayoria
+        # de panoramicas adultas. Ademas evita que las etiquetas se encabalguen.
+        omit = {"18", "28", "38", "48"}
+        upper_ids = [t for t in upper_ids if t not in omit]
+        lower_ids = [t for t in lower_ids if t not in omit]
+
+        # Geometria del arco dental en una panoramica estandar:
+        #   - Los dientes ocupan la banda central vertical, no los bordes.
+        #   - El arco es parabolico: los molares (extremos) quedan MAS ALTOS
+        #     que los incisivos (centro) en la arcada superior, y mas bajos
+        #     en la inferior.
+        ARCH = {
+            #        y base   curvatura  alto caja
+            "upper": (0.455,   -0.055,    0.115),
+            "lower": (0.595,    0.055,    0.125),
+        }
+        X_MARGIN = 0.10          # los dientes no llegan al borde de la imagen
+        X_SPAN = 1.0 - 2 * X_MARGIN
+
         for row_name, ids in (("upper", upper_ids), ("lower", lower_ids)):
-            row_y = rows[row_name]
+            y_base, curve, box_h = ARCH[row_name]
+            n = len(ids)
+            slot_w = X_SPAN / n
+
             for k, tooth_id in enumerate(ids):
-                x1 = (k + 0.5) * tooth_w - tooth_w * 0.42
-                y1 = row_y
-                x2 = x1 + tooth_w * rng.uniform(0.75, 1.0)
-                y2 = y1 + tooth_h * rng.uniform(0.85, 1.15)
-                x1, y1 = max(0, x1), max(0, y1)
-                x2, y2 = min(1, x2), min(1, y2)
+                # Posicion horizontal centrada en su "slot"
+                cx = X_MARGIN + (k + 0.5) * slot_w
+
+                # Curvatura parabolica: t=0 en el centro del arco, t=±1 en los extremos
+                t = (k - (n - 1) / 2) / ((n - 1) / 2)
+                y1 = y_base + curve * (t ** 2)
+
+                # Los molares (extremos) son mas anchos que los incisivos (centro)
+                width_factor = 0.55 + 0.40 * abs(t)
+                bw = slot_w * width_factor
+
+                x1 = cx - bw / 2
+                x2 = cx + bw / 2
+                y2 = y1 + box_h * rng.uniform(0.9, 1.1)
+
+                x1, y1 = max(0.0, x1), max(0.0, y1)
+                x2, y2 = min(1.0, x2), min(1.0, y2)
 
                 roll = rng.random()
-                if roll < 0.22:
+                if roll < 0.18:
                     cls = "caries"
-                elif roll < 0.32:
+                elif roll < 0.26:
                     cls = "perdida_osea"
-                elif roll < 0.36:
+                elif roll < 0.29:
                     cls = "quiste"
                 else:
                     cls = "sano"
 
-                score = rng.uniform(0.55, 0.97) if cls != "sano" else rng.uniform(0.80, 0.99)
+                score = rng.uniform(0.62, 0.95) if cls != "sano" else rng.uniform(0.82, 0.98)
 
                 boxes.append([x1, y1, x2, y2])
                 scores.append(score)
@@ -301,8 +340,13 @@ class MockDentalInference:
                         draw.rectangle([px1 - t, py1 - t, px2 + t, py2 + t], outline=border)
 
                 if show_labels:
-                    label = f"{det['tooth_id']} {det['confidence']:.0%}"
-                    font_size = max(11, min(15, w // 65))
+                    # Etiqueta compacta: solo el numero de pieza para las sanas
+                    # (evita que 28+ etiquetas se encabalguen horizontalmente).
+                    if det["class"] == "sano":
+                        label = det["tooth_id"]
+                    else:
+                        label = f"{det['tooth_id']} {det['confidence']:.0%}"
+                    font_size = max(9, min(13, w // 90))
                     try:
                         font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", font_size)
                     except Exception:
