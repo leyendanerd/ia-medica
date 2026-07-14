@@ -95,7 +95,10 @@ class MockDentalInference:
             if score >= confidence_threshold:
                 meta = PATHOLOGY_CLASSES[cls]
                 detections.append({
-                    "box": box, "confidence": float(score), "class": cls,
+                    # Convertir a floats nativos de Python: np.ndarray/np.float32
+                    # no son serializables por json.dumps() al exportar el reporte.
+                    "box": [float(v) for v in box],
+                    "confidence": float(score), "class": cls,
                     "label": f"Diente {tooth_id} — {meta['label']}",
                     "tooth_id": tooth_id,
                 })
@@ -317,22 +320,34 @@ class MockDentalInference:
         return image.convert("RGB")
 
     @staticmethod
-    def _generate_heatmap(detections, w, h, alpha):
-        heat_r = np.zeros((h, w), dtype=np.float32)
-        heat_g = np.zeros((h, w), dtype=np.float32)
-        heat_b = np.zeros((h, w), dtype=np.float32)
-        heat_a = np.zeros((h, w), dtype=np.float32)
+    def _generate_heatmap(detections, w, h, alpha, max_dim: int = 256):
+        """
+        Genera el heatmap a BAJA RESOLUCION y luego lo escala al tamano final.
 
-        ys, xs = np.mgrid[0:h, 0:w]
+        Optimizacion de memoria: la version anterior creaba 6 arrays float32 del
+        tamano completo de la imagen (np.mgrid + 4 canales). En una panoramica de
+        2000x1000 eso son ~50 MB solo para el heatmap, recalculando la gaussiana
+        para cada deteccion. Como un heatmap es difuso por naturaleza, generarlo
+        a 256px y escalarlo es visualmente equivalente y usa ~60x menos memoria.
+        """
+        scale = min(max_dim / max(w, h), 1.0)
+        hw, hh = max(1, int(w * scale)), max(1, int(h * scale))
+
+        heat_r = np.zeros((hh, hw), dtype=np.float32)
+        heat_g = np.zeros((hh, hw), dtype=np.float32)
+        heat_b = np.zeros((hh, hw), dtype=np.float32)
+        heat_a = np.zeros((hh, hw), dtype=np.float32)
+
+        ys, xs = np.mgrid[0:hh, 0:hw].astype(np.float32)
 
         for det in detections:
             if det["class"] == "sano":
                 continue
             color = PATHOLOGY_CLASSES[det["class"]]["color"]
             x1, y1, x2, y2 = det["box"]
-            px1, py1, px2, py2 = int(x1 * w), int(y1 * h), int(x2 * w), int(y2 * h)
-            cx, cy = (px1 + px2) // 2, (py1 + py2) // 2
-            rx, ry = max(1, (px2 - px1) // 2), max(1, (py2 - py1) // 2)
+            px1, py1, px2, py2 = int(x1 * hw), int(y1 * hh), int(x2 * hw), int(y2 * hh)
+            cx, cy = (px1 + px2) / 2, (py1 + py2) / 2
+            rx, ry = max(1, (px2 - px1) / 2), max(1, (py2 - py1) / 2)
 
             gauss = np.exp(-((xs - cx) ** 2 / (2 * rx ** 2) + (ys - cy) ** 2 / (2 * ry ** 2)))
             weight = gauss * det["confidence"]
@@ -348,4 +363,6 @@ class MockDentalInference:
         b = np.clip(heat_b / total_weight, 0, 255).astype(np.uint8)
         a_ch = np.clip(heat_a * alpha * 255, 0, 255).astype(np.uint8)
 
-        return Image.fromarray(np.stack([r, g, b, a_ch], axis=-1), mode="RGBA")
+        small = Image.fromarray(np.stack([r, g, b, a_ch], axis=-1), mode="RGBA")
+        # Escalar al tamano real de la imagen (bilineal = suave, propio de un heatmap)
+        return small.resize((w, h), Image.BILINEAR) if (hw, hh) != (w, h) else small

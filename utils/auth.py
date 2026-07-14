@@ -124,7 +124,13 @@ def render_login_screen():
         """, unsafe_allow_html=True)
 
         with st.expander("ℹ️ Credenciales de demostración"):
-            st.code("Odontólogo → usuario: odontologo | clave: clinica2026\nAdministrador → usuario: admin | clave: admin2026")
+            # Se usa st.text en lugar de st.code: el boton "copiar" de st.code
+            # depende de clipboard.js, que puede lanzar errores de renderizado
+            # en el frontend cuando el componente se monta dentro de un expander.
+            st.text(
+                "Odontólogo    → usuario: odontologo | clave: clinica2026\n"
+                "Administrador → usuario: admin      | clave: admin2026"
+            )
 
     st.stop()
 
