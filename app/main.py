@@ -290,6 +290,35 @@ with col_upload:
             progress_placeholder.empty()
             st.success(f"✅ Análisis completado en {results['inference_ms']:.0f} ms", icon="✅")
 
+        # ── Envío al sistema clínico ─────────────────────────────────────────
+        # Se habilita SOLO cuando ya existe un análisis (st.session_state.results).
+        # Mientras no haya resultados, el botón aparece deshabilitado (disabled=True).
+        analysis_done = st.session_state.results is not None
+
+        if st.button(
+            "📤 Enviar información a sistema clínico",
+            disabled=not analysis_done,
+            key="send_to_clinic",
+            help="Disponible tras ejecutar el análisis" if not analysis_done else "Envía el reporte al sistema de gestión de la clínica",
+        ):
+            with st.spinner("Enviando al sistema clínico..."):
+                time.sleep(1.0)  # Simula la latencia de una llamada al HIS/sistema clínico
+            r = st.session_state.results
+            st.success("✅ Información enviada correctamente al sistema clínico", icon="✅")
+            st.markdown(f"""
+            <div style="background:rgba(46,213,115,0.06); border:1px solid rgba(46,213,115,0.25);
+                        border-radius:10px; padding:0.75rem 1rem; margin-top:0.5rem; font-size:0.8rem; color:#8899bb;">
+                <div style="color:#2ed573; font-weight:600; margin-bottom:0.35rem;">📋 Registro clínico generado</div>
+                <div>ID de envío: <span style="color:#e8f0fe;">REC-{time.strftime('%Y%m%d-%H%M%S')}</span></div>
+                <div>Piezas registradas: <span style="color:#e8f0fe;">{r['total_teeth']}</span> ·
+                     Hallazgos: <span style="color:#e8f0fe;">{r['affected_teeth']}</span></div>
+                <div>Profesional: <span style="color:#e8f0fe;">{current_user['display_name']}</span></div>
+                <div style="margin-top:0.35rem; font-size:0.72rem; opacity:0.7;">
+                    ⚠️ Simulación (MVP) — no hay integración real con un HIS todavía.
+                </div>
+            </div>
+            """, unsafe_allow_html=True)
+
 with col_results:
     st.markdown('<p class="card-title">📊 Resultados del análisis</p>', unsafe_allow_html=True)
 
